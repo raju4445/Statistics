@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistics</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; color: #1f2937; height: 100vh; overflow: hidden; }
+        .option-btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); border-width: 2px; }
+        .option-btn:hover:not(:disabled) { border-color: #6366f1; background-color: #f5f3ff; transform: translateY(-1px); }
+        .correct { background-color: #10b981 !important; color: white !important; border-color: #059669 !important; }
+        .incorrect { background-color: #ef4444 !important; color: white !important; border-color: #dc2626 !important; }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        #loading-overlay { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(8px); }
+        .katex { font-size: 1.1em; }
+        .main-card { max-height: 95vh; display: flex; flex-direction: column; }
+        .scrollable-content { overflow-y: auto; scrollbar-width: thin; }
+    </style>
+</head>
+<body class="flex items-center justify-center p-2 sm:p-4">
+
+    <!-- Global Loading Screen -->
+    <div id="loading-overlay" class="fixed inset-0 z-[100] flex items-center justify-center">
+        <div class="text-center">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent mb-4"></div>
+            <p id="loading-text" class="text-indigo-900 font-bold">Connecting to Cloud Database...</p>
+        </div>
+    </div>
+
+    <div class="max-w-3xl w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 main-card">
+        <div class="bg-indigo-600 px-6 py-4 text-white flex justify-between items-center shrink-0">
+            <h1 class="text-xl font-black tracking-tight" id="header-title">Math Quiz Engine</h1>
+            <button id="logout-btn" onclick="logout()" class="hidden text-xs bg-indigo-800 px-3 py-1 rounded hover:bg-indigo-900 shadow">Logout</button>
+            <div id="timer-display" class="hidden font-mono text-sm font-bold bg-indigo-500 px-3 py-1 rounded-lg">00:00</div>
+        </div>
+
+        <div class="p-5 flex-grow flex flex-col scrollable-content relative">
+            
+            <!-- ROLE SELECTION -->
+            <div id="role-section" class="space-y-6 my-auto text-center fade-in hidden">
+                <h2 class="text-2xl font-bold mb-8">Welcome! Who are you?</h2>
+                <div class="flex flex-col sm:flex-row justify-center gap-4">
+                    <button onclick="showSection('student-form-section')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg">I am a Student</button>
+                    <button onclick="showSection('admin-login-section')" class="bg-gray-800 hover:bg-gray-900 text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg">I am the Admin</button>
+                </div>
+            </div>
+
+            <!-- ADMIN LOGIN -->
+            <div id="admin-login-section" class="hidden max-w-sm mx-auto w-full my-auto fade-in">
+                <h2 class="text-xl font-bold mb-4 text-center">Admin Login</h2>
+                <input type="text" id="admin-user" placeholder="Username" class="w-full p-3 mb-3 border rounded-xl focus:ring-2 outline-none">
+                <input type="password" id="admin-pass" placeholder="Password" class="w-full p-3 mb-4 border rounded-xl focus:ring-2 outline-none">
+                <button onclick="attemptLogin()" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">Login</button>
+                <button onclick="showSection('role-section')" class="w-full text-gray-500 mt-3 text-sm font-bold">Cancel</button>
+            </div>
+
+            <!-- ADMIN DASHBOARD -->
+            <div id="admin-panel" class="hidden flex-col gap-6 fade-in pb-10">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                        <h3 class="font-bold text-gray-700 mb-2">Quiz Settings</h3>
+                        <label class="text-xs text-gray-500">Questions per Quiz:</label>
+                        <input type="number" id="q-limit" class="w-full p-2 border rounded mt-1 mb-2" value="10" min="1">
+                        <button onclick="saveSettings()" class="bg-indigo-600 hover:bg-indigo-700 transition-all text-white px-3 py-2 rounded text-sm w-full font-bold">Save Setting</button>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-xl border border-gray-200 md:col-span-2 flex justify-between items-center">
+                        <div>
+                            <h3 class="font-bold text-gray-700">Cloud Question Bank</h3>
+                            <p class="text-sm text-gray-500"><span id="repo-count" class="font-bold text-indigo-600">0</span> questions live</p>
+                        </div>
+                        <button onclick="clearQuestions()" class="bg-red-50 text-red-600 border border-red-200 px-3 py-2 rounded text-sm font-bold hover:bg-red-100">Delete All</button>
+                    </div>
+                </div>
+
+                <div class="border border-gray-200 rounded-xl overflow-hidden">
+                    <div class="bg-gray-100 p-3 font-bold text-gray-700">Add Questions</div>
+                    <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-indigo-50 cursor-pointer" id="drop-zone">
+                            <input type="file" id="file-input" accept=".docx" class="hidden">
+                            <label for="file-input" class="cursor-pointer block">
+                                <span class="font-bold block text-gray-700">Upload .docx File</span>
+                                <span class="text-xs text-gray-500 mt-1">Parses math and auto-uploads to Cloud</span>
+                            </label>
+                        </div>
+                        <div class="space-y-2">
+                            <textarea id="man-q" placeholder="Question Text (Use $$ for math)" class="w-full p-2 border rounded text-sm h-16"></textarea>
+                            <div class="grid grid-cols-2 gap-2">
+                                <input type="text" id="man-a" placeholder="Option A" class="p-2 border rounded text-sm">
+                                <input type="text" id="man-b" placeholder="Option B" class="p-2 border rounded text-sm">
+                                <input type="text" id="man-c" placeholder="Option C" class="p-2 border rounded text-sm">
+                                <input type="text" id="man-d" placeholder="Option D" class="p-2 border rounded text-sm">
+                            </div>
+                            <div class="flex gap-2">
+                                <select id="man-ans" class="p-2 border rounded text-sm flex-grow">
+                                    <option value="A">Correct: A</option><option value="B">Correct: B</option>
+                                    <option value="C">Correct: C</option><option value="D">Correct: D</option>
+                                </select>
+                                <button onclick="addManualQuestion()" class="bg-indigo-600 text-white px-4 py-2 rounded text-sm font-bold">Add</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NEW: VIEW & EDIT QUESTIONS PANEL -->
+                <div class="border border-gray-200 rounded-xl overflow-hidden">
+                    <div class="bg-gray-100 p-3 font-bold text-gray-700 flex justify-between items-center">
+                        <span>Manage Repository Questions</span>
+                        <span id="manage-count" class="text-xs text-indigo-600 font-bold">0 Questions</span>
+                    </div>
+                    <div id="questions-list-container" class="p-4 space-y-4 max-h-96 overflow-y-auto divide-y divide-gray-100 bg-white">
+                        <!-- Populated dynamically via JS -->
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="font-bold text-gray-700 mb-2">Student Results (Cloud Sync)</h3>
+                    <div class="overflow-x-auto border border-gray-200 rounded-xl">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-gray-100 text-gray-600"><tr><th class="p-3">Date</th><th class="p-3">Name</th><th class="p-3">Grade/Sec</th><th class="p-3">Score</th></tr></thead>
+                            <tbody id="results-table-body" class="divide-y divide-gray-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STUDENT DETAILS -->
+            <div id="student-form-section" class="hidden max-w-md mx-auto w-full my-auto fade-in">
+                <h2 class="text-2xl font-black mb-2 text-center">Student Details</h2>
+                <div class="space-y-4">
+                    <input type="text" id="stu-name" placeholder="Full Name" class="w-full p-3 border rounded-xl focus:ring-2 border-indigo-200 outline-none">
+                    <div class="flex gap-4">
+                        <input type="text" id="stu-grade" placeholder="Grade (e.g. 10)" class="w-1/2 p-3 border rounded-xl focus:ring-2 border-indigo-200 outline-none">
+                        <input type="text" id="stu-section" placeholder="Section (e.g. A)" class="w-1/2 p-3 border rounded-xl focus:ring-2 border-indigo-200 outline-none">
+                    </div>
+                    <button onclick="startQuiz()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold text-lg transition-all shadow-md mt-4">Start Quiz</button>
+                    <button onclick="showSection('role-section')" class="w-full text-gray-400 font-bold text-sm mt-2">Go Back</button>
+                </div>
+            </div>
+
+            <!-- QUIZ VIEW -->
+            <div id="quiz-section" class="hidden flex-grow flex flex-col">
+                <div class="flex justify-between items-end mb-4 border-b border-gray-50 pb-3">
+                    <div class="flex gap-4">
+                        <div class="text-center"><span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest block">Progress</span><span class="font-bold text-gray-700">Q <span id="current-idx">1</span>/<span id="total-qs">10</span></span></div>
+                        <div class="text-center"><span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest block">Score</span><span class="font-bold text-emerald-600" id="current-score">0</span></div>
+                    </div>
+                </div>
+                <div id="question-container" class="fade-in flex-grow flex flex-col">
+                    <div id="question-text" class="text-lg sm:text-xl font-bold text-gray-800 mb-6 leading-tight"></div>
+                    <div id="options-grid" class="grid grid-cols-1 gap-2 sm:gap-3 mb-4"></div>
+                </div>
+                <div class="mt-auto pt-2"><button id="next-btn" class="hidden w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold transition-all">Next Question</button></div>
+            </div>
+
+            <!-- RESULT VIEW -->
+            <div id="result-section" class="hidden text-center py-4 fade-in my-auto">
+                <div class="text-5xl mb-4">🏆</div>
+                <h2 class="text-2xl font-black text-gray-900 mb-1">Quiz Complete!</h2>
+                <p id="result-student-name" class="text-gray-500 font-bold"></p>
+                <div class="bg-gray-50 rounded-2xl p-6 my-6 border border-gray-100 inline-block min-w-[200px]">
+                    <div class="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Final Score</div>
+                    <div class="text-4xl font-black text-gray-900"><span id="final-score">0</span><span class="text-gray-300 font-light mx-1">/</span><span id="final-total">10</span></div>
+                </div>
+                <button onclick="showSection('role-section')" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-8 rounded-xl font-bold transition-all mx-auto block">Back to Home</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 transform translate-y-20 opacity-0 transition-all duration-500 bg-gray-900 text-white px-6 py-3 rounded-full shadow-xl z-[200] font-bold text-sm">
+        <span id="toast-msg"></span>
+    </div>
+
+    <script>
+        // ==========================================
+        // YOUR INTEGRATED GOOGLE SCRIPT WEB APP URL
+        // ==========================================
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyBFB4Vnfgu4kJ8uUGULwA0foF2scs7PYokflhPNtOAoWRM9wC5FBPxBvM5ampIDVYFVA/exec"; 
+        // ==========================================
+
+        let allQuestions = [];
+        let studentResults = [];
+        let settings = { questionsPerQuiz: 10 };
+        
+        let currentStudent = { name: '', grade: '', section: '' };
+        let currentQuizSet = [];
+        let currentIndex = 0; let score = 0; let secondsElapsed = 0;
+        let attemptsUsed = 0; let timerInterval = null;
+        let editingIndex = null; // Track currently edited question
+
+        // Initialization: Fetch all data from Cloud
+        window.onload = async () => {
+            await fetchCloudData();
+            document.getElementById('loading-overlay').classList.add('hidden');
+            showSection('role-section');
+        };
+
+        // --- CLOUD DATABASE FUNCTIONS ---
+        async function fetchCloudData() {
+            try {
+                const response = await fetch(GOOGLE_SCRIPT_URL);
+                const data = await response.json();
+                allQuestions = data.questions || [];
+                
+                // Safe parsing of settings from Cloud
+                if (data.settings && data.settings.questionsPerQuiz) {
+                    settings.questionsPerQuiz = parseInt(data.settings.questionsPerQuiz) || 10;
+                } else {
+                    settings.questionsPerQuiz = 10;
+                }
+
+                studentResults = data.results || [];
+                
+                document.getElementById('q-limit').value = settings.questionsPerQuiz;
+                updateRepoUI();
+            } catch(e) {
+                showToast("Error connecting to cloud database.", true);
+            }
+        }
+
+        async function saveToCloud(action, payloadData) {
+            try {
+                // background POST request with mode: 'no-cors' so it doesn't fail silently
+                fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: action, data: payloadData })
+                });
+            } catch(e) { console.error("Cloud push failed:", e); }
+        }
+
+        // --- NAVIGATION ---
+        function showSection(sectionId) {
+            ['role-section', 'admin-login-section', 'admin-panel', 'student-form-section', 'quiz-section', 'result-section'].forEach(id => document.getElementById(id).classList.add('hidden'));
+            document.getElementById(sectionId).classList.remove('hidden');
+            
+            document.getElementById('timer-display').classList.add('hidden');
+            document.getElementById('logout-btn').classList.add('hidden');
+            document.getElementById('header-title').innerText = "Math Quiz Engine";
+
+            if(sectionId === 'admin-panel') {
+                document.getElementById('logout-btn').classList.remove('hidden');
+                document.getElementById('header-title').innerText = "Admin Dashboard";
+                renderResultsTable();
+                renderQuestionsList();
+            } else if (sectionId === 'quiz-section') {
+                document.getElementById('timer-display').classList.remove('hidden');
+            }
+        }
+
+        // --- ADMIN LOGIN ---
+        function attemptLogin() {
+            const user = document.getElementById('admin-user').value;
+            const pass = document.getElementById('admin-pass').value;
+            // Feel free to update login credentials below 
+            if (user === 'adminmath' && pass === 'admin123') {
+                document.getElementById('admin-user').value = ''; document.getElementById('admin-pass').value = '';
+                showSection('admin-panel');
+                showToast("Admin Logged In");
+            } else { showToast("Invalid Credentials", true); }
+        }
+        function logout() { showSection('role-section'); }
+
+        // --- ADMIN: SETTINGS & QUESTIONS ---
+        function saveSettings() {
+            let limitVal = parseInt(document.getElementById('q-limit').value);
+            
+            // Fix invalid inputs (Negative numbers, 0, or empty strings)
+            if (isNaN(limitVal) || limitVal < 1) {
+                limitVal = 10; // Fallback default
+                document.getElementById('q-limit').value = 10;
+                showToast("Invalid number! Resetting to 10.", true);
+            }
+
+            settings.questionsPerQuiz = limitVal;
+            saveToCloud('saveSettings', settings);
+            
+            // Smart feedback based on bank size
+            if(allQuestions.length > 0 && limitVal > allQuestions.length) {
+                showToast(`Saved. Note: You only have ${allQuestions.length} questions available.`, true);
+            } else {
+                showToast(`Saved! Students will get ${limitVal} questions.`);
+            }
+        }
+
+        function updateRepoUI() { 
+            const total = allQuestions.length;
+            document.getElementById('repo-count').innerText = total; 
+            const manageCount = document.getElementById('manage-count');
+            if (manageCount) manageCount.innerText = `${total} Question${total !== 1 ? 's' : ''}`;
+            
+            if (!document.getElementById('admin-panel').classList.contains('hidden')) {
+                renderQuestionsList();
+            }
+        }
+
+        function clearQuestions() {
+            if(confirm("Delete ALL questions permanently from Cloud?")) {
+                allQuestions = []; 
+                editingIndex = null;
+                saveToCloud('saveQuestions', allQuestions);
+                updateRepoUI();
+                showToast("Cloud questions cleared.");
+            }
+        }
+
+        function addManualQuestion() {
+            const q = document.getElementById('man-q').value;
+            const a = document.getElementById('man-a').value; const b = document.getElementById('man-b').value;
+            const c = document.getElementById('man-c').value; const d = document.getElementById('man-d').value;
+            const ans = document.getElementById('man-ans').value;
+
+            if(!q || !a || !b || !c || !d) return showToast("Fill all fields", true);
+
+            allQuestions.push({
+                text: fixMathNotation(q),
+                options:[ 
+                    { label: 'A', html: fixMathNotation(a), isCorrect: ans === 'A' }, 
+                    { label: 'B', html: fixMathNotation(b), isCorrect: ans === 'B' }, 
+                    { label: 'C', html: fixMathNotation(c), isCorrect: ans === 'C' }, 
+                    { label: 'D', html: fixMathNotation(d), isCorrect: ans === 'D' }
+                ]
+            });
+
+            // Reset manual inputs
+            document.getElementById('man-q').value = '';
+            document.getElementById('man-a').value = ''; document.getElementById('man-b').value = '';
+            document.getElementById('man-c').value = ''; document.getElementById('man-d').value = '';
+            
+            updateRepoUI();
+            saveToCloud('saveQuestions', allQuestions);
+            showToast("Question uploaded to Cloud!");
+        }
+
+        // --- MANAGE QUESTIONS: VIEW & EDIT INLINE ---
+        function renderQuestionsList() {
+            const container = document.getElementById('questions-list-container');
+            container.innerHTML = '';
+
+            if (allQuestions.length === 0) {
+                container.innerHTML = '<p class="text-gray-400 text-sm text-center py-6">The repository is currently empty.</p>';
+                return;
+            }
+
+            allQuestions.forEach((q, idx) => {
+                const item = document.createElement('div');
+                item.className = "py-4 space-y-3 first:pt-0 last:pb-0";
+
+                if (editingIndex === idx) {
+                    // Editable Form Layout
+                    item.innerHTML = `
+                        <div class="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 space-y-3 fade-in">
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-wider text-indigo-500 block mb-1">Question Text</label>
+                                <textarea id="edit-q-text" class="w-full p-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 outline-none h-16">${q.text}</textarea>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-[10px] font-black uppercase tracking-wider text-gray-400 block mb-1">Option A</label>
+                                    <input type="text" id="edit-opt-a" value="${q.options[0]?.html || ''}" class="w-full p-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 outline-none">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-black uppercase tracking-wider text-gray-400 block mb-1">Option B</label>
+                                    <input type="text" id="edit-opt-b" value="${q.options[1]?.html || ''}" class="w-full p-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 outline-none">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-black uppercase tracking-wider text-gray-400 block mb-1">Option C</label>
+                                    <input type="text" id="edit-opt-c" value="${q.options[2]?.html || ''}" class="w-full p-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 outline-none">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-black uppercase tracking-wider text-gray-400 block mb-1">Option D</label>
+                                    <input type="text" id="edit-opt-d" value="${q.options[3]?.html || ''}" class="w-full p-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 outline-none">
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-bold text-gray-500">Correct:</span>
+                                    <select id="edit-correct-ans" class="p-1.5 border border-gray-200 rounded-lg text-xs font-bold">
+                                        <option value="A" ${q.options[0]?.isCorrect ? 'selected' : ''}>Option A</option>
+                                        <option value="B" ${q.options[1]?.isCorrect ? 'selected' : ''}>Option B</option>
+                                        <option value="C" ${q.options[2]?.isCorrect ? 'selected' : ''}>Option C</option>
+                                        <option value="D" ${q.options[3]?.isCorrect ? 'selected' : ''}>Option D</option>
+                                    </select>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button onclick="saveEdit(${idx})" class="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Save</button>
+                                    <button onclick="cancelEdit()" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-bold">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // Regular Display Mode with dynamic visual indicator for correct options
+                    let optionsHtml = '';
+                    q.options.forEach(opt => {
+                        optionsHtml += `
+                            <div class="text-xs p-2 rounded-lg border ${opt.isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-bold' : 'bg-gray-50 border-gray-100 text-gray-600'}">
+                                <span class="font-mono text-[10px] bg-white border px-1.5 py-0.5 rounded shadow-sm mr-1.5">${opt.label}</span>
+                                <span>${opt.html}</span>
+                            </div>
+                        `;
+                    });
+
+                    item.innerHTML = `
+                        <div class="flex gap-4 justify-between items-start">
+                            <div class="flex-grow space-y-2">
+                                <div class="font-bold text-gray-800 text-sm leading-tight">
+                                    <span class="text-indigo-600 font-mono text-xs mr-1">[${idx + 1}]</span>
+                                    <span>${q.text}</span>
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    ${optionsHtml}
+                                </div>
+                            </div>
+                            <div class="flex sm:flex-col gap-2 shrink-0">
+                                <button onclick="triggerEdit(${idx})" class="bg-indigo-50 text-indigo-600 border border-indigo-100 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg text-xs font-bold">Edit</button>
+                                <button onclick="deleteSingleQuestion(${idx})" class="bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 px-2.5 py-1.5 rounded-lg text-xs font-bold">Delete</button>
+                            </div>
+                        </div>
+                    `;
+                }
+                container.appendChild(item);
+            });
+
+            // Re-render KaTeX structures over the list
+            renderMath(container);
+        }
+
+        function triggerEdit(idx) {
+            editingIndex = idx;
+            renderQuestionsList();
+        }
+
+        function cancelEdit() {
+            editingIndex = null;
+            renderQuestionsList();
+        }
+
+        function saveEdit(idx) {
+            const txt = document.getElementById('edit-q-text').value.trim();
+            const a = document.getElementById('edit-opt-a').value.trim();
+            const b = document.getElementById('edit-opt-b').value.trim();
+            const c = document.getElementById('edit-opt-c').value.trim();
+            const d = document.getElementById('edit-opt-d').value.trim();
+            const correctAns = document.getElementById('edit-correct-ans').value;
+
+            if (!txt || !a || !b || !c || !d) {
+                return showToast("All question fields are required", true);
+            }
+
+            allQuestions[idx] = {
+                text: fixMathNotation(txt),
+                options: [
+                    { label: 'A', html: fixMathNotation(a), isCorrect: correctAns === 'A' },
+                    { label: 'B', html: fixMathNotation(b), isCorrect: correctAns === 'B' },
+                    { label: 'C', html: fixMathNotation(c), isCorrect: correctAns === 'C' },
+                    { label: 'D', html: fixMathNotation(d), isCorrect: correctAns === 'D' }
+                ]
+            };
+
+            editingIndex = null;
+            updateRepoUI();
+            saveToCloud('saveQuestions', allQuestions);
+            showToast("Question updated!");
+        }
+
+        function deleteSingleQuestion(idx) {
+            if (confirm(`Delete Question #${idx + 1} permanently?`)) {
+                allQuestions.splice(idx, 1);
+                if (editingIndex === idx) editingIndex = null;
+                else if (editingIndex > idx) editingIndex--; // Adjust index offset
+                
+                updateRepoUI();
+                saveToCloud('saveQuestions', allQuestions);
+                showToast("Question deleted.");
+            }
+        }
+
+        // --- WORD DOC PARSING ---
+        document.getElementById('file-input').addEventListener('change', (e) => { if (e.target.files.length > 0) handleFileUpload(e.target.files[0]); });
+        
+        async function handleFileUpload(file) {
+            document.getElementById('loading-overlay').classList.remove('hidden');
+            document.getElementById('loading-text').innerText = "Parsing & Uploading...";
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const result = await mammoth.convertToHtml({ arrayBuffer: e.target.result });
+                parseAndProcess(result.value);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function fixMathNotation(html) {
+            let str = html || "";
+            str = str.replace(/→/g, ' \\rightarrow ').replace(/∘/g, ' \\circ ').replace(/×/g, ' \\times ').replace(/÷/g, ' \\div ').replace(/±/g, ' \\pm ').replace(/≤/g, ' \\le ').replace(/≥/g, ' \\ge ').replace(/≠/g, ' \\neq ');
+            const mathDetect = /([a-zA-Z][\(\)∘→\:a-zA-Z0-9\-\+\=\^]{1,})/g;
+            if (!str.includes('$')) {
+                str = str.replace(mathDetect, (match) => { return (match.length > 3 && !/[\(\)∘→\:\-\+\=\^]/.test(match)) ? match : `$${match}$`; });
+            }
+            return str;
+        }
+
+        function parseAndProcess(html) {
+            const temp = document.createElement('div'); temp.innerHTML = html;
+            const paragraphs = Array.from(temp.querySelectorAll('p, li'));
+            let newQs =[]; let currentQ = null;
+
+            paragraphs.forEach(p => {
+                const innerHtml = p.innerHTML; const textContent = p.innerText.trim();
+                if (!textContent) return;
+                const markers =[...innerHtml.matchAll(/\(([a-d])\)/gi)];
+
+                if (markers.length > 0) {
+                    if (!currentQ) return;
+                    let parts = innerHtml.split(/\([a-d]\)/gi);
+                    if (parts[0].trim() && currentQ.options.length === 0) currentQ.text += " " + fixMathNotation(parts[0]);
+                    markers.forEach((match, i) => {
+                        let optHtml = parts[i + 1] ? parts[i + 1].trim() : "";
+                        const isCorrect = optHtml.toUpperCase().includes('[ANS]');
+                        currentQ.options.push({ label: match[1].toUpperCase(), html: fixMathNotation(optHtml.replace(/\[ANS\]/gi, "").trim()), isCorrect });
+                    });
+                } else {
+                    if (currentQ && currentQ.options.length >= 2) newQs.push(currentQ);
+                    currentQ = { text: fixMathNotation(innerHtml.replace(/^\d+[\.\)\s]\s*/, "")), options:[] };
+                }
+            });
+            if (currentQ && currentQ.options.length >= 2) newQs.push(currentQ);
+            
+            if (newQs.length > 0) {
+                allQuestions =[...allQuestions, ...newQs];
+                updateRepoUI();
+                saveToCloud('saveQuestions', allQuestions);
+                showToast(`${newQs.length} questions added to Cloud.`);
+            }
+            document.getElementById('loading-overlay').classList.add('hidden');
+        }
+
+        function renderMath(element) {
+            if (window.renderMathInElement) renderMathInElement(element, { delimiters:[{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}], throwOnError : false });
+        }
+
+        // --- QUIZ LOGIC ---
+        function startQuiz() {
+            currentStudent.name = document.getElementById('stu-name').value.trim();
+            currentStudent.grade = document.getElementById('stu-grade').value.trim();
+            currentStudent.section = document.getElementById('stu-section').value.trim();
+
+            if (!currentStudent.name || !currentStudent.grade) return showToast("Enter Name and Grade", true);
+            if (allQuestions.length === 0) return showToast("Admin hasn't uploaded questions yet!", true);
+
+            showSection('quiz-section');
+            currentIndex = 0; score = 0; secondsElapsed = 0;
+            
+            // Limit respects both the Admin Setting and the actual array length
+            let limitSetting = parseInt(settings.questionsPerQuiz) || 10;
+            const limit = Math.min(allQuestions.length, limitSetting);
+            
+            currentQuizSet = [...allQuestions].sort(() => 0.5 - Math.random()).slice(0, limit);
+            
+            document.getElementById('total-qs').innerText = limit; document.getElementById('final-total').innerText = limit;
+            document.getElementById('current-score').innerText = score;
+            
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                secondsElapsed++;
+                document.getElementById('timer-display').innerText = `${Math.floor(secondsElapsed / 60).toString().padStart(2, '0')}:${(secondsElapsed % 60).toString().padStart(2, '0')}`;
+            }, 1000);
+            
+            showQuestion();
+        }
+
+        function showQuestion() {
+            attemptsUsed = 0;
+            const q = currentQuizSet[currentIndex];
+            const qText = document.getElementById('question-text'); const oGrid = document.getElementById('options-grid');
+            qText.innerHTML = q.text; oGrid.innerHTML = '';
+            
+            document.getElementById('next-btn').classList.add('hidden'); document.getElementById('next-btn').innerText = "Next Question"; 
+            document.getElementById('current-idx').innerText = currentIndex + 1;
+
+            // SHUFFLE OPTIONS LOGIC HERE: Randomly rearrange the correct and wrong options
+            let shuffledOptions =[...q.options].sort(() => 0.5 - Math.random());
+            const labels =['A', 'B', 'C', 'D', 'E', 'F'];
+
+            shuffledOptions.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = "option-btn w-full text-left p-3 sm:p-4 rounded-xl border-gray-100 bg-white flex items-center gap-3 shadow-sm text-sm sm:text-base";
+                
+                // Labels remain strictly A, B, C, D going downwards
+                const currentLabel = labels[idx] || String.fromCharCode(65 + idx);
+
+                btn.innerHTML = `<div class="flex-shrink-0 w-8 h-8 rounded-lg bg-gray-50 text-gray-400 flex items-center justify-center font-bold text-xs border border-gray-100">${currentLabel}</div><div class="option-content flex-grow text-gray-700 font-semibold">${opt.html}</div>`;
+                
+                btn.onclick = () => { 
+                    if (document.getElementById('next-btn').classList.contains('hidden') && !btn.disabled) {
+                        handleAnswer(btn, opt.isCorrect, oGrid, shuffledOptions);
+                    }
+                };
+                oGrid.appendChild(btn);
+            });
+
+            renderMath(qText); renderMath(oGrid);
+            document.getElementById('question-container').classList.remove('fade-in'); void document.getElementById('question-container').offsetWidth; document.getElementById('question-container').classList.add('fade-in');
+        }
+
+        function handleAnswer(btn, isCorrect, grid, currentShuffledOptions) {
+            attemptsUsed++; const btns = grid.querySelectorAll('button'); const nextBtn = document.getElementById('next-btn');
+            if (isCorrect) {
+                btns.forEach(b => b.disabled = true); btn.classList.add('correct');
+                score++; document.getElementById('current-score').innerText = score;
+                setTimeout(moveToNext, 800);
+            } else {
+                if (attemptsUsed < 2) {
+                    btn.classList.add('incorrect'); btn.disabled = true; showToast("Incorrect! One try remaining.");
+                } else {
+                    btns.forEach(b => b.disabled = true); btn.classList.add('incorrect');
+                    
+                    // Highlights correct answer in green even if user misses twice
+                    btns.forEach((b, i) => { if (currentShuffledOptions[i].isCorrect) b.classList.add('correct'); });
+                    
+                    nextBtn.classList.remove('hidden'); if (currentIndex === currentQuizSet.length - 1) nextBtn.innerText = "Finish Quiz";
+                }
+            }
+        }
+
+        function moveToNext() { (currentIndex < currentQuizSet.length - 1) ? (currentIndex++, showQuestion()) : finishQuiz(); }
+        document.getElementById('next-btn').onclick = moveToNext;
+
+        function finishQuiz() {
+            clearInterval(timerInterval);
+            document.getElementById('final-score').innerText = score;
+            document.getElementById('result-student-name').innerText = `Great effort, ${currentStudent.name}!`;
+            showSection('result-section');
+
+            // Save to Cloud instantly
+            const resultData = { date: new Date().toLocaleDateString(), name: currentStudent.name, grade: currentStudent.grade, section: currentStudent.section, score: score, total: currentQuizSet.length };
+            studentResults.unshift(resultData); // Add to local array so admin sees it if they log in immediately
+            saveToCloud('saveResult', resultData);
+            showToast("Result saved to teacher's database!");
+        }
+
+        function renderResultsTable() {
+            const tbody = document.getElementById('results-table-body'); tbody.innerHTML = '';
+            studentResults.forEach(res => {
+                tbody.innerHTML += `<tr><td class="p-3">${res.date}</td><td class="p-3 font-bold">${res.name}</td><td class="p-3">${res.grade} ${res.section ? '- ' + res.section : ''}</td><td class="p-3 text-emerald-600 font-bold">${res.score} / ${res.total}</td></tr>`;
+            });
+        }
+
+        function showToast(msg, isErr = false) {
+            const t = document.getElementById('toast'); document.getElementById('toast-msg').innerText = msg;
+            t.className = `fixed bottom-6 left-1/2 -translate-x-1/2 transition-all duration-500 px-6 py-3 rounded-full shadow-xl z-[200] font-bold text-sm ${isErr ? 'bg-red-600' : 'bg-gray-900'} text-white opacity-100 translate-y-0`;
+            setTimeout(() => t.classList.add('opacity-0', 'translate-y-20'), 3000);
+        }
+    </script>
+</body>
+</html>
